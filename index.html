@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Breakout (Kugelhagel)</title>
+    
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #2c3e50;
+            margin: 0;
+            color: #ecf0f1;
+        }
+
+        .game-container {
+            text-align: center;
+            background: #34495e;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            color: #f1c40f;
+            margin-bottom: 10px;
+        }
+
+        #breakoutCanvas {
+            background: #fcfcfc;
+            display: block;
+            margin: 0 auto 15px auto;
+            border: 2px solid #bdc3c7;
+            cursor: none; /* Mauszeiger verstecken */
+        }
+
+        #status {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+
+        #startGame {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #startGame:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Breakout</h1>
+        <canvas id="breakoutCanvas" width="480" height="320"></canvas>
+        <div id="status">Punkte: <span id="score">0</span> | Leben: <span id="lives">3</span></div>
+        <button id="startGame">Spiel Starten</button>
+    </div>
+
+    <script>
+        // Canvas und Kontext initialisieren
+        const canvas = document.getElementById("breakoutCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Spielvariablen
+        let score = 0;
+        let lives = 3;
+        let gameRunning = false;
+        let gameInterval;
+
+        // Ball-Eigenschaften
+        let x = canvas.width / 2;
+        let y = canvas.height - 30;
+        let dx = 2; // Richtung x
+        let dy = -2; // Richtung y
+        const ballRadius = 10;
+
+        // Paddel-Eigenschaften
+        const paddleHeight = 10;
+        const paddleWidth = 75;
+        let paddleX = (canvas.width - paddleWidth) / 2;
+
+        // Steine-Eigenschaften
+        const brickRowCount = 5;
+        const brickColumnCount = 7;
+        const brickWidth = 50;
+        const brickHeight = 15;
+        const brickPadding = 5;
+        const brickOffsetTop = 30;
+        const brickOffsetLeft = 15;
+
+        // Array für die Steine
+        const bricks = [];
+        for (let c = 0; c < brickColumnCount; c++) {
+            bricks[c] = [];
+            for (let r = 0; r < brickRowCount; r++) {
+                // Status 1: Stein existiert, 0: Stein zerstört
+                bricks[c][r] = { x: 0, y: 0, status: 1 }; 
+            }
+        }
+
+        // DOM-Elemente
+        const scoreDisplay = document.getElementById("score");
+        const livesDisplay = document.getElementById("lives");
+        const startGameButton = document.getElementById("startGame");
+
+        // --- Zeichnungs-Funktionen ---
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "#e74c3c"; // Rot
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawPaddle() {
+            ctx.beginPath();
+            ctx.rect(paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
+            ctx.fillStyle = "#3498db"; // Blau
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawBricks() {
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    if (bricks[c][r].status === 1) {
+                        const brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
+                        const brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
+                        bricks[c][r].x = brickX;
+                        bricks[c][r].y = brickY;
+                        ctx.beginPath();
+                        ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                        // Farbe je nach Zeile variieren
+                        const color = r % 2 === 0 ? "#2ecc71" : "#f1c40f"; 
+                        ctx.fillStyle = color;
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                }
+            }
+        }
+
+        // --- Logik-Funktionen ---
+
+        // Kollisionserkennung
+        function collisionDetection() {
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    const b = bricks[c][r];
+                    if (b.status === 1) {
+                        if (x > b.x && x < b.x + brickWidth && y > b.y && y < b.y + brickHeight) {
+                            dy = -dy; // Ball prallt ab
+                            b.status = 0; // Stein zerstören
+                            score++;
+                            scoreDisplay.textContent = score;
+
+                            // Prüfen, ob alle Steine zerstört wurden (Spiel gewonnen)
+                            if (score === brickRowCount * brickColumnCount) {
+                                alert("GEWONNEN, HERZLICHEN GLÜCKWUNSCH!");
+                                endGame();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Spielverlauf (Haupt-Schleife)
+        function draw() {
+            if (!gameRunning) return;
+
+            // Canvas leeren
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Elemente zeichnen
+            drawBricks();
+            drawBall();
+            drawPaddle();
+            collisionDetection();
+
+            // Kollision mit der Wand (oben, links, rechts)
+            if (x + dx > canvas.width - ballRadius || x + dx < ballRadius) {
+                dx = -dx; // Umkehrung der horizontalen Richtung
+            }
+            if (y + dy < ballRadius) {
+                dy = -dy; // Umkehrung der vertikalen Richtung (oben)
+            } 
+            // Kollision mit dem unteren Rand
+            else if (y + dy > canvas.height - ballRadius) {
+                // Kollision mit dem Paddel
+                if (x > paddleX && x < paddleX + paddleWidth) {
+                    dy = -dy; 
+                } 
+                // Ball fällt durch (Leben verlieren)
+                else {
+                    lives--;
+                    livesDisplay.textContent = lives;
+
+                    if (lives <= 0) {
+                        alert("GAME OVER!");
+                        endGame();
+                    } else {
+                        // Ball und Paddel neu positionieren
+                        x = canvas.width / 2;
+                        y = canvas.height - 30;
+                        dx = 2;
+                        dy = -2;
+                        paddleX = (canvas.width - paddleWidth) / 2;
+                    }
+                }
+            }
+
+            // Ball-Bewegung
+            x += dx;
+            y += dy;
+        }
+
+        // --- Event-Handler ---
+
+        // Maus-Steuerung (einfache und intuitive Steuerung)
+        document.addEventListener("mousemove", mouseMoveHandler, false);
+
+        function mouseMoveHandler(e) {
+            // Relative Position der Maus zum Canvas
+            const relativeX = e.clientX - canvas.offsetLeft; 
+
+            // Paddel nur innerhalb der Canvas-Grenzen bewegen
+            if (relativeX > 0 && relativeX < canvas.width) {
+                paddleX = relativeX - paddleWidth / 2;
+            }
+        }
+
+
+        // --- Steuerung Spielzustand ---
+
+        function startGame() {
+            if (gameRunning) return;
+            
+            // Spielvariablen zurücksetzen (falls es ein Neustart ist)
+            score = 0;
+            lives = 3;
+            scoreDisplay.textContent = score;
+            livesDisplay.textContent = lives;
+            
+            // Steine zurücksetzen
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    bricks[c][r].status = 1;
+                }
+            }
+
+            // Ball und Paddel neu positionieren
+            x = canvas.width / 2;
+            y = canvas.height - 30;
+            dx = 2; 
+            dy = -2;
+            paddleX = (canvas.width - paddleWidth) / 2;
+
+            gameRunning = true;
+            startGameButton.textContent = "Neu Starten";
+
+            // Startet die Haupt-Spiele-Schleife mit 10 Millisekunden Intervall (ca. 100 FPS)
+            gameInterval = setInterval(draw, 10); 
+        }
+
+        function endGame() {
+            clearInterval(gameInterval);
+            gameRunning = false;
+            startGameButton.textContent = "Spiel Starten";
+        }
+
+        // Event-Listener für den Start-Button
+        startGameButton.addEventListener("click", startGame);
+
+        // Beim Laden einmal zeichnen, damit man das Start-Setup sieht
+        drawBricks();
+        drawPaddle();
+        drawBall();
+    </script>
+</body>
+</html>
